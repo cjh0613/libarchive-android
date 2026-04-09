@@ -1,10 +1,12 @@
 name: Android CI
 
-on: [push]
+on:
+  push:
+  release:
+    types: [created]
 
 jobs:
   build:
-
     runs-on: ubuntu-latest
 
     steps:
@@ -12,10 +14,37 @@ jobs:
       uses: actions/checkout@v3
       with:
         submodules: true
+    
     - name: Set up JDK 17
       uses: actions/setup-java@v3
       with:
         distribution: 'temurin'
         java-version: '17'
+    
     - name: Build with Gradle
       run: ./gradlew assembleDebug lintVitalRelease
+    
+    - name: Build Release AAR
+      run: ./gradlew assembleRelease
+    
+    - name: Find AAR files
+      id: find-aar
+      run: |
+        AAR_PATH=$(find . -name "*.aar" -type f | head -1)
+        if [ -z "$AAR_PATH" ]; then
+          echo "No AAR files found, trying APK..."
+          APK_PATH=$(find . -name "*.apk" -type f | head -1)
+          echo "artifact_path=$APK_PATH" >> $GITHUB_OUTPUT
+          echo "artifact_name=$(basename $APK_PATH)" >> $GITHUB_OUTPUT
+        else
+          echo "artifact_path=$AAR_PATH" >> $GITHUB_OUTPUT
+          echo "artifact_name=$(basename $AAR_PATH)" >> $GITHUB_OUTPUT
+        fi
+    
+    - name: Upload to Release
+      if: github.event_name == 'release'
+      uses: softprops/action-gh-release@v1
+      with:
+        files: ${{ steps.find-aar.outputs.artifact_path }}
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
