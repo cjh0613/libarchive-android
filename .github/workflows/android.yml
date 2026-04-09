@@ -1,6 +1,7 @@
 name: Android CI
 
 on:
+  push:
   release:
     types: [created]
 
@@ -20,33 +21,79 @@ jobs:
         distribution: 'temurin'
         java-version: '17'
     
-    - name: Build with Gradle (Debug)
+    - name: Build with Gradle
       run: ./gradlew assembleDebug lintVitalRelease
     
-    - name: Build Release AAR with Size Optimization
+    - name: Inject Optimization Flags for Release Build
+      if: github.event_name == 'release'
       run: |
-        ./gradlew assembleRelease \
-          -DCMAKE_CXX_FLAGS="-s -O3 -fvisibility=hidden -fvisibility-inlines-hidden -flto=thin" \
-          -DCMAKE_C_FLAGS="-s -O3 -fvisibility=hidden -flto=thin" \
-          -DCMAKE_EXE_LINKER_FLAGS="-s" \
-          -DCMAKE_SHARED_LINKER_FLAGS="-s"
+        cat > library/build.gradle.kts << 'EOF'
+        plugins {
+            id("com.android.library")
+            id("com.vanniktech.maven.publish")
+        }
+
+        android {
+            namespace = "me.zhanghai.android.libarchive"
+            buildToolsVersion = "36.1.0"
+            compileSdk = 36
+            ndkVersion = "29.0.14206865"
+            enableKotlin = false
+
+            defaultConfig {
+                minSdk = 21
+                consumerProguardFiles("proguard-rules.pro")
+                externalNativeBuild { cmake { arguments += "-DANDROID_STL=none" } }
+            }
+
+            buildTypes { 
+                release { 
+                    isMinifyEnabled = false
+                    externalNativeBuild {
+                        cmake {
+                            arguments += "-DCMAKE_BUILD_TYPE=Release"
+                            arguments += "-DCMAKE_CXX_FLAGS_RELEASE=-O3 -s -fvisibility=hidden -fvisibility-inlines-hidden -flto=thin"
+                            arguments += "-DCMAKE_C_FLAGS_RELEASE=-O3 -s -fvisibility=hidden -flto=thin"
+                            arguments += "-DCMAKE_SHARED_LINKER_FLAGS=-s -Wl,--gc-sections"
+                            arguments += "-DCMAKE_EXE_LINKER_FLAGS=-s -Wl,--gc-sections"
+                        }
+                    }
+                } 
+            }
+            
+            compileOptions {
+                sourceCompatibility = JavaVersion.VERSION_1_8
+                targetCompatibility = JavaVersion.VERSION_1_8
+            }
+            externalNativeBuild { cmake { path = file("CMakeLists.txt") } }
+        }
+
+        dependencies { implementation("androidx.annotation:annotation:1.9.1") }
+        EOF
     
-    - name: Find AAR files
+    - name: Build Release AAR with Optimization
+      if: github.event_name == 'release'
+      run: ./gradlew assembleRelease
+    
+    - name: Find and Upload AAR
+      if: github.event_name == 'release'
       id: find-aar
       run: |
-        AAR_PATH=$(find . -name "*.aar" -type f | head -1)
+        AAR_PATH=$(find . -name "*.aar" -type f | grep -E "library.*release" | head -1)
         if [ -z "$AAR_PATH" ]; then
-          echo "No AAR files found, trying APK..."
-          APK_PATH=$(find . -name "*.apk" -type f | head -1)
-          echo "artifact_path=$APK_PATH" >> $GITHUB_OUTPUT
-          echo "artifact_name=$(basename $APK_PATH)" >> $GITHUB_OUTPUT
-        else
+          AAR_PATH=$(find . -name "*release.aar" -type f | head -1)
+        fi
+        if [ -z "$AAR_PATH" ]; then
+          AAR_PATH=$(find . -name "*.aar" -type f | head -1)
+        fi
+        if [ ! -z "$AAR_PATH" ]; then
           echo "artifact_path=$AAR_PATH" >> $GITHUB_OUTPUT
           echo "artifact_name=$(basename $AAR_PATH)" >> $GITHUB_OUTPUT
+          echo "Found AAR: $AAR_PATH"
         fi
     
     - name: Upload to Release
-      if: github.event_name == 'release'
+      if: github.event_name == 'release' && steps.find-aar.outputs.artifact_path != ''
       uses: softprops/action-gh-release@v1
       with:
         files: ${{ steps.find-aar.outputs.artifact_path }}
