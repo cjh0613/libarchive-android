@@ -1,7 +1,6 @@
 name: Android CI
 
 on:
-  push:
   release:
     types: [created]
 
@@ -52,8 +51,8 @@ jobs:
                     externalNativeBuild {
                         cmake {
                             arguments += "-DCMAKE_BUILD_TYPE=Release"
-                            arguments += "-DCMAKE_CXX_FLAGS_RELEASE=-O3 -s -fvisibility=hidden -fvisibility-inlines-hidden -flto=thin"
-                            arguments += "-DCMAKE_C_FLAGS_RELEASE=-O3 -s -fvisibility=hidden -flto=thin"
+                            arguments += "-DCMAKE_CXX_FLAGS_RELEASE=-O3 -fvisibility=hidden -fvisibility-inlines-hidden -flto=thin"
+                            arguments += "-DCMAKE_C_FLAGS_RELEASE=-O3 -fvisibility=hidden -flto=thin"
                             arguments += "-DCMAKE_SHARED_LINKER_FLAGS=-s -Wl,--gc-sections"
                             arguments += "-DCMAKE_EXE_LINKER_FLAGS=-s -Wl,--gc-sections"
                         }
