@@ -21,11 +21,16 @@ jobs:
         distribution: 'temurin'
         java-version: '17'
     
-    - name: Build with Gradle
+    - name: Build with Gradle (Debug)
       run: ./gradlew assembleDebug lintVitalRelease
     
-    - name: Build Release AAR
-      run: ./gradlew assembleRelease
+    - name: Build Release AAR with Size Optimization
+      run: |
+        ./gradlew assembleRelease \
+          -DCMAKE_CXX_FLAGS="-s -O3 -fvisibility=hidden -fvisibility-inlines-hidden -flto=thin" \
+          -DCMAKE_C_FLAGS="-s -O3 -fvisibility=hidden -flto=thin" \
+          -DCMAKE_EXE_LINKER_FLAGS="-s" \
+          -DCMAKE_SHARED_LINKER_FLAGS="-s"
     
     - name: Find AAR files
       id: find-aar
